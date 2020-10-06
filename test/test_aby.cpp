@@ -3,9 +3,11 @@
 #include "../include/aby/Share.h"
 #include "../include/aby/gadgets.h"
 #include "../include/aby/quotient_folder.hpp"
+#include "../include/aby/quotient_sorter.hpp"
 #include "abycore/aby/abyparty.h"
 #include "abycore/sharing/sharing.h"
 #include "cxxopts.hpp"
+#include <limits>
 #include <numeric>
 #include <algorithm>
 #include <random>
@@ -359,6 +361,54 @@ struct ABYTester {
     party.ExecCircuit();
   }
 
+  template <class MultShare>
+  void test_quotient_sorter() {
+    auto circ = circuit<MultShare>();
+    size_t num_bits = llround(2*((double)(bitlen)/3));
+    size_t den_bits = llround((double)(bitlen)/3);
+    assert (num_bits + den_bits == bitlen);
+    auto data_num = make_random_vector(num_bits);
+    auto data_den = make_random_vector(den_bits);
+    print("numerators: {}\ndenominators: {}\n", data_num, data_den);
+
+    constexpr size_t max_size{3};
+    struct ClearQuot{size_t num, den, idx;};
+    std::vector<ClearQuot> clear_quotients;
+    clear_quotients.reserve(nvals);
+    for (size_t i = 0; i != nvals; i++){
+      clear_quotients.emplace_back(ClearQuot{data_num[i], data_den[i], i});
+    }
+
+    auto comparator = [&](auto&a, auto&b){return ((a.num * b.den > b.num * a.den)
+        or ( (a.num * b.den == b.num * a.den) and (a.den > b.den) ));};
+    std::partial_sort(clear_quotients.begin(), std::next(clear_quotients.begin(), max_size), clear_quotients.end(), comparator);
+    for(size_t i=0; i != max_size; i++){
+      fmt::print("Position {}: num: {}, den: {}, idx: {}, intDiv: {}\n", i, clear_quotients[i].num, clear_quotients[i].den, clear_quotients[i].idx, clear_quotients[i].num/clear_quotients[i].den);
+    }
+
+    Quotient<MultShare> inq = {
+      {circ, data_num.data(), bitlen, SERVER, nvals},
+      {circ, data_den.data(), bitlen, CLIENT, nvals}
+    };
+    vector<BoolShare> targets = {ascending_numbers_constant(bc, nvals)};
+
+    using QS = QuotientSorter<MultShare>;
+
+    QS sorter(move(inq), QS::SortOp::MAX_TIE, move(targets), max_size);
+    if constexpr (std::is_same_v<MultShare, ArithShare>) {
+      sorter.set_converters_and_den_bits(&to_bool_closure, &to_arith_closure, den_bits);
+    }
+    sorter.sort();
+
+    for(size_t i = 0; i != max_size; i++){
+    print_share(sorter.get_selector(i).num, to_string(i)+ "ter num");
+    print_share(sorter.get_selector(i).den, to_string(i)+"ter den");
+    print_share(sorter.get_target(i), to_string(i)+"ter index");
+    }
+
+    party.ExecCircuit();
+    party.Reset();
+  }
 
   void test_add() {
     constexpr uint32_t _bitlen = 8;
@@ -419,7 +469,12 @@ int main(int argc, char *argv[])
   //tester.test_conversion();
   //tester.test_reinterpret();
   //tester.test_split_accumulate();
-  tester.test_quotient_folder<BoolShare>();
+  //print("Testing Folder\n");
+  //tester.test_quotient_folder<BoolShare>();
+  print("Testing Sorter in BoolShare\n");
+  tester.test_quotient_sorter<BoolShare>();
+  print("Testing Sorter in ArithShare\n");
+  tester.test_quotient_sorter<ArithShare>();
   //tester.test_max_quotient();
   //tester.test_bm_input();
   //tester.test_deterministic_aby_chaos();

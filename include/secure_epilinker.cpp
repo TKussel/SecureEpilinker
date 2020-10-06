@@ -81,6 +81,10 @@ void SecureEpilinker::build_count_circuit(const size_t num_records, const size_t
   build_circuit(num_records, database_size);
   state.matching_mode = true;
 }
+void SecureEpilinker::build_k_max_circuit(const size_t num_records, const size_t database_size) {
+  build_circuit(num_records, database_size);
+  state.matching_mode = false;
+}
 void SecureEpilinker::build_circuit(const size_t num_records_, const size_t database_size_) {
   // TODO When separation of setup, online phase and input setting is done in
   // ABY, call selc->build_circuit() here instead of in run()
@@ -127,7 +131,7 @@ void SecureEpilinker::set_server_input(const EpilinkServerInput& input) {
 void SecureEpilinker::set_both_inputs(
     const EpilinkClientInput& in_client, const EpilinkServerInput& in_server) {
   assert(in_client.num_records == in_server.num_records
-      && in_client.database_size == in_server.database_size)
+      && in_client.database_size == in_server.database_size);
   check_state_for_input(state, in_client);
   selc->set_both_inputs(in_client, in_server);
   state.input_set = true;
@@ -193,6 +197,42 @@ CountResult<CircUnit> SecureEpilinker::run_count() {
   get_logger()->trace("ABYParty Circuit executed.");
 
   auto clear_results = to_clear_value(results);
+  state.reset(); // need to setup new circuit
+  return clear_results;
+}
+KMaxResult<CircUnit> to_clear_value(KMaxOutputShares& res, [[maybe_unused]] size_t dice_prec) {
+  KMaxResult<CircUnit> result;
+  for(size_t i = 0; i != res.index.size(); i++){
+#ifdef DEBUG_SEL_RESULT
+    result.sum_field_weights.emplace_back(res.score_numerator[i].get_clear_value<CircUnit>());
+    // shift by dice-precision to account for precision of threshold, i.e.,
+    // get denominator and numerator to same scale
+    result.sum_weights.emplace_back(res.score_denominator[i].get_clear_value<CircUnit>() << dice_prec);
+#else
+    result.sum_field_weights.emplace_back(0);
+    result.sum_weights.emplace_back(0);
+#endif
+    result.index.emplace_back(res.index[i].get_clear_value<CircUnit>());
+    result.match.emplace_back(res.match[i].get_clear_value<bool>());
+    result.tmatch.emplace_back(res.tmatch[i].get_clear_value<bool>());
+  }
+  return result;
+}
+vector<KMaxResult<CircUnit>> SecureEpilinker::run_k_max_linkage() {
+  if (!state.setup) {
+    get_logger()->warn(
+        "SecureEpilinker::run_linkage: Implicitly running setup phase.");
+    run_setup_phase();
+  }
+
+  auto results = selc->build_k_max_circuit();
+  get_logger()->trace("Executing ABYParty Circuit...");
+  party->ExecCircuit();
+  get_logger()->trace("ABYParty Circuit executed.");
+
+  auto clear_results = transform_vec(results, [dice_prec=cfg.dice_prec](auto r){
+        return to_clear_value(r, dice_prec);
+      });
   state.reset(); // need to setup new circuit
   return clear_results;
 }

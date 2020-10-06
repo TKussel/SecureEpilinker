@@ -41,6 +41,7 @@ struct CircuitConfig {
   BooleanSharing bool_sharing = BooleanSharing::YAO;
   bool use_conversion = true;
   size_t bitlen = BitLen;
+  size_t max_elements = 3;
 
   // pre-calculated fields
   size_t dice_prec, weight_prec;
@@ -50,7 +51,8 @@ struct CircuitConfig {
       const bool matching_mode = false,
       const BooleanSharing bool_sharing = BooleanSharing::YAO,
       const bool use_conversion = true,
-      const size_t bitlen = BitLen);
+      const size_t bitlen = BitLen,
+      const size_t max_elements = 3);
   ~CircuitConfig() = default;
 
   /**

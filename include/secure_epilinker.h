@@ -71,6 +71,7 @@ public:
 
   void build_linkage_circuit(const size_t num_records, const size_t database_size);
   void build_count_circuit(const size_t num_records, const size_t database_size);
+  void build_k_max_circuit(const size_t num_records, const size_t database_size);
 
   /*
    * TODO The separation of setup and online phase is currently not possible in
@@ -99,6 +100,7 @@ public:
 
   std::vector<Result<CircUnit>> run_linkage();
   CountResult<CircUnit> run_count();
+  std::vector<KMaxResult<CircUnit>> run_k_max_linkage();
 
   /**
    * Resets the ABY Party and states.

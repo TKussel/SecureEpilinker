@@ -47,6 +47,36 @@ using B2AConverter = std::function<ArithShare (const BoolShare&)>;
 template<class ShareT>
 void print_share(const Quotient<ShareT>& q, const std::string& msg);
 
+template<class ShareT>
+std::vector<Quotient<ShareT>> nval_to_vec(Quotient<ShareT>&& input){
+  std::vector<Quotient<ShareT>> result;
+  result.reserve(input.num.get_nvals());
+  auto num{input.num.split(1)};
+  auto den{input.den.split(1)};
+  assert(num.size() == den.size());
+  for(std::size_t i = 0; i != num.size(); i++){
+    result.push_back(Quotient<ShareT>{std::move(num[i]), std::move(den[i])});
+  }
+  return result;
+}
+
+namespace detail{
+  template<class container>
+  struct vec_pair{std::vector<container> first; std::vector<container> second;};
+}
+template<class container>
+detail::vec_pair<container> split_vec(std::vector<container>&& in, std::size_t n){
+  std::vector<container> first{std::move(in)};
+  std::size_t orig_size(first.size());
+  std::vector<container> second;
+  second.reserve(n);
+  for(std::size_t i = orig_size-n; i != orig_size; i++){
+    second.emplace_back(std::move(first[i]));
+  }
+  first.resize(orig_size-n);
+  return {std::move(first), std::move(second)};
+}
+
 /**
  * Accumulates all values in simd_share as if it was first split and then
  * binary-accumulated using op. Returns a share of same bitlen and nvals=1.

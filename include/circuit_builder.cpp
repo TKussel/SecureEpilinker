@@ -25,6 +25,7 @@ using fmt::format;
 #include "logger.h"
 #include "aby/Share.h"
 #include "aby/quotient_folder.hpp"
+#include "aby/quotient_sorter.hpp"
 
 using namespace std;
 
@@ -43,6 +44,13 @@ struct LinkageShares {
   BoolShare index, match, tmatch;
 #ifdef DEBUG_SEL_RESULT
   MultShare score_numerator, score_denominator;
+#endif
+};
+template <class MultShare>
+struct KMaxShares {
+  std::vector<BoolShare> index, match, tmatch;
+#ifdef DEBUG_SEL_RESULT
+  std::vector<MultShare> score_numerator, score_denominator;
 #endif
 };
 
@@ -136,6 +144,22 @@ public:
 
     built = true;
     return sum_linkage_shares(linkage_shares);
+  }
+
+  std::vector<KMaxOutputShares> build_k_max_circuit() override {
+    if (!ins.is_input_set()) {
+      throw new runtime_error("Set the input first before building the ciruit!");
+    }
+
+    vector<KMaxOutputShares> output_shares;
+    output_shares.reserve(ins.nrecords());
+    for (size_t index = 0; index != ins.nrecords(); ++index) {
+      output_shares.emplace_back(
+            to_k_max_output(build_single_k_max_circuit(index)));
+    }
+
+    built = true;
+    return output_shares;
   }
 
   void reset() override {
@@ -281,6 +305,111 @@ private:
 
     return {out(to_gmw(sum(matches)), ALL), out(to_gmw(sum(tmatches)), ALL)};
   }
+  /*
+  * Builds the k max linkage component of the circuit
+  */
+  KMaxShares<MultShare> build_single_k_max_circuit(size_t index) {
+    get_logger()->trace("Building k-max circuit component {}...", index);
+
+    // Where we store all group and individual comparison weights
+    vector<FieldWeight<MultShare>> field_weights;
+
+    // 1. Field weights of individual fields
+    // 1.1 For all exchange groups, find the permutation with the highest score
+    // Where we collect indices not already used in an exchange group
+    IndexSet no_x_group;
+    // fill with field names, remove later
+    for (const auto& field : cfg.epi.fields) no_x_group.emplace(field.first);
+    // for each group, store the best permutation's weight into field_weights
+    for (const auto& group : cfg.epi.exchange_groups) {
+      // add this group's field weight to vector
+      field_weights.emplace_back(best_group_weight(index, group));
+      // remove all indices that were covered by this index group
+      for (const auto& i : group) no_x_group.erase(i);
+    }
+    // 1.2 Remaining indices
+    for (const auto& i : no_x_group) {
+      field_weights.emplace_back(field_weight({index, i, i}));
+    }
+
+    // 2. Sum up all field weights.
+    QuotientShare sum_field_weights = sum(field_weights);
+#ifdef DEBUG_SEL_CIRCUIT
+    print_share(sum_field_weights, format("[{}] sum_field_weights", index));
+#endif
+
+    KMaxShares<MultShare> result;
+    // 3a. Determine index of max score of all nvals calculations
+    const auto max_fw_and_index = max_indices(move(sum_field_weights));
+    for (size_t i = 0; i != cfg.max_elements; i++) {
+        //for (0..k)
+        const auto max_field_weight = max_fw_and_index.get_selector(i);
+        const auto max_idx = max_fw_and_index.get_target(i);
+
+        // 4. Set two comparison bits, whether field-weight-sum > (tentative) threshold * weight-sum
+        BoolShare threshold_weight = to_logic_space(ins.const_threshold() * max_field_weight.den);
+        BoolShare tthreshold_weight = to_logic_space(ins.const_tthreshold() * max_field_weight.den);
+        BoolShare b_sum_field_weight = to_logic_space(max_field_weight.num);
+        BoolShare match = threshold_weight < b_sum_field_weight;
+        BoolShare tmatch = tthreshold_weight < b_sum_field_weight;
+#ifdef DEBUG_SEL_CIRCUIT
+        print_share(max_field_weight, format("<{}>: [{}] score", i, index));
+        print_share(max_idx, format("<{}>: [{}] index ", i, index));
+        print_share(threshold_weight, format("<{}>: [{}] T*W", i, index));
+        print_share(tthreshold_weight, format("<{}>: [{}] Tt*W", i, index));
+        print_share(match, format("<{}>: [{}] match?", i, index));
+        print_share(tmatch, format("<{}>: [{}] tentative match?", i, index));
+#endif
+
+        get_logger()->trace("K-Max circuit component {} built.", index);
+
+#ifdef DEBUG_SEL_RESULT
+        result.index.emplace_back(move(max_idx));
+        result.match.emplace_back(move(match));
+        result.tmatch.emplace_back(move(tmatch));
+        result.score_numerator.emplace_back(move(max_field_weight.num));
+        result.score_denominator.emplace_back(move(max_field_weight.den));
+#else
+        result.index.emplace_back(move(max_idx));
+        result.match.emplace_back(move(match));
+        result.tmatch.emplace_back(move(tmatch));
+#endif
+    }
+    return result;
+  }
+
+  KMaxOutputShares to_k_max_output(const KMaxShares<MultShare>& s) {
+    const size_t k = cfg.max_elements;
+    KMaxOutputShares result;
+    result.index.reserve(k);
+    result.match.reserve(k);
+    result.tmatch.reserve(k);
+#ifdef DEBUG_SEL_RESULT
+    result.score_numerator.reserve(k);
+    result.score_denominator.reserve(k);
+#endif
+    for (size_t i = 0; i != k; i++){
+      // Output shares should be XOR, not Yao shares
+      auto index = to_gmw(s.index[i]);
+      auto match = to_gmw(s.match[i]);
+      auto tmatch = to_gmw(s.tmatch[i]);
+#ifdef DEBUG_SEL_RESULT
+      // If result debugging is enabled, we let all parties learn all fields plus
+      // the individual {field-,}weight-sums.
+      // matching mode flag is ignored - it's basically always on.
+      result.index.emplace_back(out(index, ALL));
+      result.match.emplace_back(out(match, ALL));
+      result.tmatch.emplace_back(out(tmatch, ALL));
+      result.score_numerator.emplace_back(out(s.score_numerator[i], ALL));
+      result.score_denominator.emplace_back(out(s.score_denominator[i], ALL));
+#else // !DEBUG_SEL_RESULT - Normal productive mode
+      result.index.emplace_back(out(index, ALL));
+      result.match.emplace_back(out(match, ALL));
+      result.tmatch.emplace_back(out(tmatch, ALL));
+#endif // end ifdef DEBUG_SEL_RESULT
+    }
+    return result;
+  }
 
   /**
    * Bit-usage of nfields many weights summed up
@@ -302,6 +431,9 @@ private:
   auto max_index(QuotientShare&& field_weights) {
     return max_targets(forward<QuotientShare>(field_weights), {ins.const_idx()}, cfg.epi.nfields);
   }
+  auto max_indices(QuotientShare&& field_weights) {
+    return k_max_targets(forward<QuotientShare>(field_weights), {ins.const_idx()}, cfg.epi.nfields, cfg.max_elements);
+  }
 
   auto max_targets(QuotientShare&& quotients, vector<BoolShare>&& targets, size_t nfields) {
     __ignore(nfields);
@@ -312,6 +444,17 @@ private:
           weight_sum_bits(nfields));
     }
     return folder.fold();
+  }
+  auto k_max_targets(QuotientShare&& quotients, vector<BoolShare>&& targets, size_t nfields, size_t k) {
+    __ignore(nfields);
+    QuotientSorter<MultShare> sorter(forward<QuotientShare>(quotients),
+        QuotientSorter<MultShare>::SortOp::MAX_TIE, forward<vector<BoolShare>>(targets), k);
+    if constexpr (do_arith_mult) {
+      sorter.set_converters_and_den_bits(&to_bool_closure, &to_arith_closure,
+          weight_sum_bits(nfields));
+    }
+    sorter.sort();
+    return sorter;
   }
 
   FieldWeight<MultShare> best_group_weight(size_t index, const IndexSet& group_set) {

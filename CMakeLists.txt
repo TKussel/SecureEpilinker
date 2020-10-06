@@ -50,6 +50,7 @@ set(${P}_ABY_SOURCES
   "include/aby/gadgets.cpp"
   "include/aby/statsprinter.cpp"
   "include/aby/quotient_folder.hpp"
+  "include/aby/quotient_sorter.hpp"
 )
 
 set(${P}_CIRCUIT_SOURCES

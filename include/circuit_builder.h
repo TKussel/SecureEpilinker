@@ -38,6 +38,13 @@ struct CountOutputShares {
   OutShare matches, tmatches;
 };
 
+struct KMaxOutputShares {
+  std::vector<OutShare> index, match, tmatch;
+#ifdef DEBUG_SEL_RESULT
+  std::vector<OutShare> score_numerator, score_denominator;
+#endif
+};
+
 class CircuitBuilderBase {
 public:
   virtual ~CircuitBuilderBase() = default;
@@ -51,6 +58,7 @@ public:
 
   virtual std::vector<LinkageOutputShares> build_linkage_circuit() = 0;
   virtual CountOutputShares build_count_circuit() = 0;
+  virtual std::vector<KMaxOutputShares> build_k_max_circuit() = 0;
 
   virtual void reset() = 0;
 };
