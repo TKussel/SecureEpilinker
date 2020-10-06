@@ -55,8 +55,22 @@ FieldComparator str_to_fcomp(const string& str) {
     return FieldComparator::DICE;
   else if (str == "binary")
     return FieldComparator::BINARY;
+  else if (str == "tanimoto")
+    return FieldComparator::TANIMOTO;
   assert(!"This should never be reached!");
   throw runtime_error("Invalid Comparator Type");
+}
+
+std::string fcomp_to_str(const FieldComparator& fcomp){
+  if (fcomp == FieldComparator::BINARY){
+    return "binary";
+  } else if (fcomp == FieldComparator::DICE) {
+    return "dice";
+  } else if (fcomp == FieldComparator::TANIMOTO){
+    return "tanimoto";
+  }
+  assert(!"This should never be reached!");
+  throw runtime_error("Invalid Comparator");
 }
 
 std::string ftype_to_str(const FieldType& type) {

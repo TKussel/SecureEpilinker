@@ -1,6 +1,6 @@
 /**
   \file    circuit_builder.cpp
-  \author  Sebastian Stammler <sebastian.stammler@cysec.de>
+  \author  Sebastian Stammler <sebastian.stammler@cysec.de>, Tobias Kussel <tobias.kussel@cysec.de>
   \copyright SEL - Secure EpiLinker
   Copyright (C) 2018 Computational Biology & Simulation Group TU-Darmstadt
   This program is free software: you can redistribute it and/or modify
@@ -361,7 +361,7 @@ private:
    * - Set rescaled weight as arithmetic constant
    * - Set weight to 0 if any field on either side is empty
    * - Run comparison, dependent on field type:
-   *   - Bitmasks: Dice coefficient with precision dice_prec
+   *   - Bitmasks: Dice coefficient or tanimoto with precision dice_prec
    *   - Binary: Simple Equality, but 0/1 shifted to the left by same dice_prec
    * - Multiply result of comparison with weight -> field weight
    * - Return field weight and weight
@@ -409,7 +409,14 @@ private:
    */
   MultShare compare(const ComparisonIndex& i) {
     const auto ftype = cfg.epi.fields.at(i.left).comparator;
-    return (ftype == FieldComparator::DICE) ?  dice_coefficient(i) : equality(i);
+    if (ftype == FieldComparator::DICE)
+      return dice_coefficient(i);
+    if (ftype == FieldComparator::BINARY)
+      return equality(i);
+    if (ftype == FieldComparator::TANIMOTO)
+      return tanimoto(i);
+    assert(!"Should never be reached!");
+    return equality(i); // To silence warning
   }
 
   /**
@@ -460,6 +467,53 @@ private:
     } else {
       return to_mult_space(cmp << cfg.dice_prec);
     }
+  }
+
+  /**
+  * Calculates tanimoto coefficient of given bitmasks via their hamming weights, up
+  * to the configured precision.
+  * Note that we use rounding integer division, that is (x+(y/2))/y, because x/y
+  * always rounds down, which would lead to a bias.
+  * Output is a fixed-point number with precision cfg.dice_prec
+  */
+  MultShare tanimoto(const ComparisonIndex& i) {
+    const auto [client_entry, server_entry] = ins.get(i);
+
+    const BoolShare hw_and = hammingweight(server_entry.val & client_entry.val); // numerator
+    BoolShare hw_plus_minus = (hammingweight(client_entry.val) + hammingweight(server_entry.val)) - hammingweight(server_entry.val & client_entry.val); // denominator
+    //const BoolShare hw_plus_minus = hw_plus - hw_and; // denominator
+#ifdef DEBUG_SEL_CIRCUIT
+    print_share(hw_and, format("hw_and {}", i));
+    //print_share(hw_plus, format("hw_plus {}", i));
+    print_share(hw_plus_minus, format("hw_plus_minus {}", i));
+    print_share(hammingweight(server_entry.val), format("server_hw {}", i));
+    print_share(hammingweight(client_entry.val), format("client_hw {}", i));
+    get_logger()->trace("Bitlength hw_and: {}, Bitlength hw_plus_minus: {}", hw_and.get_bitlen(), hw_plus_minus.get_bitlen());
+#endif
+
+    // fixed point rounding integer division
+    // hw_size(bitsize) + 1  denominator is sum of two values of original bitsize.
+    // Both are hammingweights.
+    const auto bitsize_nom = hw_size(cfg.epi.fields.at(i.left).bitsize);
+    const auto bitsize_denom = hw_size(cfg.epi.fields.at(i.left).bitsize) + 1;
+    hw_plus_minus.set_bitlength(bitsize_denom);
+    const auto int_div_file_path = format((cfg.circ_dir/"sel_int_div/{}_{}_{}.aby").string(),
+        bitsize_nom, bitsize_denom, cfg.dice_prec);
+    //const auto int_div_file_path = format((cfg.circ_dir/"sel_int_div/{}_{}.aby").string(),
+        //bitsize_nom, bitsize_denom, cfg.dice_prec);
+#ifdef DEBUG_SEL_CIRCUIT
+    get_logger()->trace("Using binary gate: {}", int_div_file_path);
+#endif
+    const BoolShare tanimoto = apply_file_binary(hw_and, hw_plus_minus, bitsize_nom, bitsize_denom, int_div_file_path);
+    //const BoolShare tanimoto = apply_file_binary(hw_and, hw_and, bitsize_nom, bitsize_nom, int_div_file_path);
+
+#ifdef DEBUG_SEL_CIRCUIT
+    print_share(hw_and, format("hw_and {}", i));
+    print_share(hw_plus_minus, format("hw_plus_minus {}", i));
+    print_share(tanimoto, format("tanimoto {}", i));
+#endif
+
+    return to_mult_space(tanimoto);
   }
 
 };

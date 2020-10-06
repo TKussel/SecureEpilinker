@@ -70,7 +70,7 @@ Record RandomInputGenerator::random_record() {
         return nullopt;
       } else {
         return random_bm(f.bitsize,
-            (f.comparator == FieldComparator::DICE) ? bm_density_shift : 0);
+            (f.comparator == FieldComparator::DICE || f.comparator == FieldComparator::TANIMOTO) ? bm_density_shift : 0);
       }
     });
 }
@@ -89,10 +89,18 @@ EpilinkInput RandomInputGenerator::generate(const size_t database_size, const si
       -> VFieldEntry {
         VFieldEntry ve;
         ve.reserve(database_size);
+        fmt::print("Comparator: {}\n", fcomp_to_str(f.comparator));
+        fmt::print("Database_size {}\nSever Empty prob: {}\nbmdensity: {}\n", database_size, server_empty_field_prob, bm_density_shift);
         for (size_t i = 0; i < database_size; ++i) {
           if (random_empty(gen)) {
-            ve.emplace_back(nullopt);
+            fmt::print("EMPTY\n");
+            fmt::print("Tanimoto with {} and {}\n", f.bitsize, bm_density_shift);
+            ve.emplace_back(random_bm(f.bitsize, bm_density_shift));
+            //ve.emplace_back(nullopt);
           } else if (f.comparator == FieldComparator::DICE) {
+            ve.emplace_back(random_bm(f.bitsize, bm_density_shift));
+          } else if (f.comparator == FieldComparator::TANIMOTO) {
+            fmt::print("Tanimoto with {} and {}\n", f.bitsize, bm_density_shift);
             ve.emplace_back(random_bm(f.bitsize, bm_density_shift));
           } else if (random_match(gen)) {
             size_t match_idx = i % num_records;
@@ -105,7 +113,6 @@ EpilinkInput RandomInputGenerator::generate(const size_t database_size, const si
       }),
       num_records
   };
-
   return {move(cfg), move(in_client), move(in_server)};
 }
 

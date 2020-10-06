@@ -29,6 +29,7 @@ namespace sel::clear_epilink {
 
 constexpr auto BIN = FieldComparator::BINARY;
 constexpr auto BM = FieldComparator::DICE;
+constexpr auto TA = FieldComparator::TANIMOTO;
 
 /******************** FieldWeight ********************/
 /**
@@ -132,6 +133,29 @@ T dice(const Bitmask& left, const Bitmask& right, size_t prec) {
   return numerator / hw_plus;
 }
 
+/**
+ * tanimoto coefficient of hamming weights
+ * Note that for integral T, we use rounding integer division, that is
+ * (x+(y/2))/y, because x/y always rounds down, which would lead to a bias.
+ */
+template<typename T>
+T tanimoto(const Bitmask& left, const Bitmask& right, size_t prec) {
+
+  T hw_and = hw(bm_and(left, right));
+  T hw_plus = hw(left) + hw(right)- hw_and;
+  if (hw_plus == 0) return 0;
+  T numerator;
+  if constexpr (is_integral_v<T>) {
+    numerator = (hw_and << (prec+1)) + (hw_plus>>1);
+#ifdef DEBUG_SEL_CLEAR
+    print("dice (({:x}<<{:x} = {:x}) + {:x} = {:x}) / {:x} =\n",
+        hw_and, (prec+1), hw_and << (prec+1), (hw_plus>>1), numerator, hw_plus);
+#endif
+  } else {
+    numerator = hw_and;
+  }
+  return numerator / hw_plus;
+}
 template<typename T>
 T equality(const Bitmask& left, const Bitmask& right, size_t prec) {
   return ((left == right) ? scale<T>(1, prec) : 0);
@@ -190,6 +214,10 @@ FieldWeight<T> field_weight(const Input& input, const CircuitConfig& cfg,
     }
     case BIN: {
       comp = equality<T>(client_entry.value(), server_entry.value(), cfg.dice_prec);
+      break;
+    }
+    case TA: {
+      comp = tanimoto<T>(client_entry.value(), server_entry.value(), cfg.dice_prec);
       break;
     }
   }

@@ -26,7 +26,8 @@
           "type": "string",
           "enum": [
             "binary",
-            "dice"
+            "dice",
+            "tanimoto"
           ]
         },
         "fieldType": {

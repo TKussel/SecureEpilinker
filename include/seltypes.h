@@ -39,10 +39,11 @@ using Weight = double;
 using VWeight = std::vector<Weight>;
 
 enum class FieldType { BITMASK, NUMBER, STRING, INTEGER };
-enum class FieldComparator { DICE, BINARY };
+enum class FieldComparator { DICE, BINARY, TANIMOTO };
 
 FieldType str_to_ftype(const std::string& str);
 FieldComparator str_to_fcomp(const std::string& str);
+std::string fcomp_to_str(const FieldComparator& fcomp);
 std::string ftype_to_str(const FieldType&);
 
 struct FieldSpec {
@@ -88,6 +89,7 @@ struct formatter<sel::FieldComparator> {
     switch(c) {
       case sel::FieldComparator::BINARY: s = "Binary"; break;
       case sel::FieldComparator::DICE: s = "Bitmask"; break;
+      case sel::FieldComparator::TANIMOTO: s = "Tanimoto"; break;
     }
     return format_to(ctx.begin(), s);
   }

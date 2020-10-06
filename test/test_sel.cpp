@@ -32,6 +32,7 @@ int bitmask_density_shift{0};
 
 constexpr auto BIN = FieldComparator::BINARY;
 constexpr auto BM = FieldComparator::DICE;
+constexpr auto TA = FieldComparator::TANIMOTO;
 constexpr double Threshold = 0.9;
 constexpr double TThreshold = 0.7;
 const fs::path CircDir = "../data/circ";
@@ -54,6 +55,10 @@ map<string, FieldData> make_test_data() {
     },
     {
       { "bm_2", 4.0, FieldComparator::DICE, FieldType::BITMASK, 8 },
+      {1}
+    },
+    {
+      { "ta_1", 6.0, FieldComparator::TANIMOTO, FieldType::BITMASK, 8 },
       {1}
     }
   };
@@ -90,7 +95,7 @@ EpilinkConfig make_dkfz_cfg() {
   };
 }
 
-enum class RunMode { dkfz = 0, integer = 1, bitmask = 2, combined = 3};
+enum class RunMode { dkfz = 0, integer = 1, bitmask = 2, combined = 3, tanimoto = 4};
 
 EpilinkConfig make_benchmark_cfg(size_t num_fields, RunMode mode) {
   map<string, FieldSpec> field_config;
@@ -103,6 +108,11 @@ EpilinkConfig make_benchmark_cfg(size_t num_fields, RunMode mode) {
       if (mode == RunMode::combined)
         fieldname += "b";
       field_config[fieldname] = FieldSpec(fieldname, 0.01, 0.04, "dice", "bitmask", 500);
+    }
+    if (mode == RunMode::tanimoto || mode == RunMode::combined) {
+      if (mode == RunMode::combined)
+        fieldname += "b";
+      field_config[fieldname] = FieldSpec(fieldname, 0.01, 0.04, "tanimoto", "bitmask", 500);
     }
   }
   EpilinkConfig cfg(field_config,{},Threshold, TThreshold);
@@ -121,7 +131,7 @@ auto set_inputs(SecureEpilinker& linker,
   }
 #ifdef DEBUG_SEL_CIRCUIT
   else {
-    linker.run_as_both(in_client, in_server);
+    linker.set_both_inputs(in_client, in_server);
   }
 #else
   else {
@@ -182,6 +192,30 @@ EpilinkInput input_simple_bm(uint32_t dbsize) {
   return {move(epi_cfg), move(in_client), move(in_server)};
 }
 
+EpilinkInput input_simple_ta(uint32_t dbsize) {
+  auto td = make_test_data();
+  // Only one bm field, single byte integer
+  EpilinkConfig epi_cfg {
+    { {"ta_1", td["ta_1"].field}, }, // fields
+    {}, // exchange groups
+    Threshold, TThreshold // size_bitmask, (tent.) thresholds
+  };
+
+  //Bitmask data_int_zero(data_int_1.size(), 0);
+
+  EpilinkClientInput in_client {
+    { {"ta_1", Bitmask{0b01110111}} }, // record
+    dbsize // dbsize
+  };
+
+  EpilinkServerInput in_server {
+    { {"ta_1", vector<FieldEntry>(dbsize, Bitmask{0b11101110})} }, // db
+    1 // num_records
+  };
+
+  return {move(epi_cfg), move(in_client), move(in_server)};
+}
+
 EpilinkInput input_exchange_grp(uint32_t dbsize) {
   auto td = make_test_data();
   auto& data_int_1 = td["int_1"].data;
@@ -190,6 +224,7 @@ EpilinkInput input_exchange_grp(uint32_t dbsize) {
   auto& f_int2 = td["int_2"].field;
   auto& f_bm1 = td["bm_1"].field;
   auto& f_bm2 = td["bm_2"].field;
+  auto& f_ta1 = td["ta_1"].field;
 
   // First test: only one bin field, single byte bitmask
   EpilinkConfig epi_cfg {
@@ -198,6 +233,7 @@ EpilinkInput input_exchange_grp(uint32_t dbsize) {
       {"int_2", f_int2},
       {"bm_1", f_bm1},
       {"bm_2", f_bm2},
+      {"ta_1", f_ta1},
     }, // fields
     {{"bm_1", "bm_2"}}, // exchange groups
     Threshold, TThreshold // size_bitmask, (tent.) thresholds
@@ -278,6 +314,7 @@ EpilinkInput generate_modal_epilink_input(size_t dbsize, size_t nrecords, size_t
     case 1: return input_benchmark_random(dbsize, nrecords, num_fields, RunMode::integer);
     case 2: return input_benchmark_random(dbsize, nrecords, num_fields, RunMode::bitmask);
     case 3: return input_benchmark_random(dbsize, nrecords, num_fields, RunMode::combined);
+    case 4: return input_benchmark_random(dbsize, nrecords, num_fields, RunMode::tanimoto);
     default: throw std::runtime_error("Wrong mode of operation! Use 0,1,2 or 3");
   }
 }
