@@ -121,7 +121,7 @@ auto set_inputs(SecureEpilinker& linker,
   }
 #ifdef DEBUG_SEL_CIRCUIT
   else {
-    linker.run_as_both(in_client, in_server);
+    linker.set_both_inputs(in_client, in_server);
   }
 #else
   else {

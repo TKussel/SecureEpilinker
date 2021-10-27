@@ -127,7 +127,7 @@ void SecureEpilinker::set_server_input(const EpilinkServerInput& input) {
 void SecureEpilinker::set_both_inputs(
     const EpilinkClientInput& in_client, const EpilinkServerInput& in_server) {
   assert(in_client.num_records == in_server.num_records
-      && in_client.database_size == in_server.database_size)
+      && in_client.database_size == in_server.database_size);
   check_state_for_input(state, in_client);
   selc->set_both_inputs(in_client, in_server);
   state.input_set = true;
