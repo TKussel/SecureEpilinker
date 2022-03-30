@@ -5,18 +5,27 @@ TODO Include Mainzelliste endpoints
 
 ## Process Overview
 
- * Setup for linkage 
- * Initialization (I)
- * Linkage / Matching (L/M)
- * Computation (C)
- * Results / Status (S)
+ 0. Setup for linkage 
+ 1. Initialization (I)
+ 2. Linkage / Matching (L/M)
+ 3. Computation (C)
+ 4. Results / Status (S)
+
+Steps 2. and 3. are interleaved.
 
 ## Preliminaries
+
+### Abbreviations
+
+ * **ML**: Mainzelliste
+ * **SEL**: SecureEpilinker
+ * **LS**: LinkageService
+ * **LID**: Linkage ID
 
 ### Global SEL Identifier
 Each ML has a global ID, which consists of the character set `[a-zA-Z0-9_]`
 (i.e. alphanumeric plus '_',). This global ID is also registered at the
-LinkageService for linkage ID (LID) management. Under this ID the LS stores the
+LS for LID management. Under this ID the LS stores the
 Identifier Encryption Keys and each global ID is assigned to an API key.
 
 ### Authorization
@@ -26,9 +35,18 @@ in the following way:
 ```
 Authorization: apiKey apiKey="<APIKey>"
 ```
-Thus the specification follows [rfc2617](http://www.ietf.org/rfc/rfc2617.txt) .
+Thus the specification follows [rfc2617](http://www.ietf.org/rfc/rfc2617.txt).
+
+### Modes of operation
+
+TODO Link
+TODO Match
 
 ## TL;DR: User-Facing API Endpoints
+
+ * TODO InitTest
+ * TODO InitMatch
+ * TODO InitLink
 
 ## Setup for Linkage ID Generation
 
@@ -63,7 +81,7 @@ the "Retry-After" header if possible.
 
 ### Example
 ```
-// GET Request http://<linkage-service>/freshIDs/<global-ML-id>?count=n
+// HTTP - GET Request http://<linkage-service>/freshIDs/<global-ML-id>?count=n
 // Authentication via HTTP header
 // Response: base64 encoded list of n new ids
 {
@@ -80,14 +98,19 @@ is restarted (update, system reboot, ...) this process must be repeated, since
 SEL deliberately does not persist states. Each ML/SEL pair must run through this
 process, it does not differ between local and remote system.
 
-Table
+|     | Name               | Description                                                                                    | Caller    | Callee | API Endpoint at Callee  |
+|-----|--------------------|------------------------------------------------------------------------------------------------|-----------|--------|-------------------------|
+| I.1 | initLocal          | ML configures local SEL to allow local communication                                           | ML        | SEL    | /initLocal              |
+| I.2 | initRemote         | ML adds a remote party to local SEL                                                            | ML        | SEL    | /initRemote/<remote_id> |
+| I.3 | testRemote         | The connection to and configuration of a remote party is tested and the connection established | ML / User | SEL    | /test/<remote_id>       |
+| I.4 | testLinkageService | The connection to a LE is tested and established                                               | ML / User | SEL    | /testLS/<remote_id>     |
 
 ### Step I.1: Local Initialization
 
 #### Request
 To establish a connection between ML and SEL, the ML initializer sends a
 TLS-authenticated and secured **HTTP PUT** to
-`https://{sel-host}:{sel-port}/init/local`.
+`https://{sel-host}:{sel-port}/initLocal`.
 
 Since the local API key is not configured until this step, this call is
 unauthenticated.
@@ -100,25 +123,25 @@ The following data is transferred:
    1. URL
    2. Other fields dependent on the data service such as caching information, pagesizes, etc.
  4. linkage configuration
-   1. Algorthimusetype
+   1. algorithm type
       * "epilink"
-   2. Score from which an entry is identified as a hit
-   3. Score below which an entry is treated as a non-hit.
-   4. Existing Exchange Groups
-      1. Fields of the groups are identified by field names
-   5. Information about the used fields
-      1. Field name
-      2. Frequency (see EpiLink paper)
-      3. Error rate (see EpiLink Paper)
-      4. Comparison type
+   2. score from which an entry is identified as a hit
+   3. score below which an entry is treated as a non-hit.
+   4. existing Exchange Groups
+      1. fields of the groups are identified by field names
+   5. information about the used fields
+      1. field name
+      2. frequency (cf. MainSEL publication)
+      3. error rate (cf. MainSEL publication)
+      4. comparison type
          * "dice" for scoring on dice coefficients.
          * "binary" for comparison on exact matches
-      5. Data type of fieldv.
+      5. data type of fieldv.
          * "bitmask"
          * "integer"
          * "number
          * "string"
-      6. Bit length of the field
+      6. bit length of the field
 
 The authentication information is passed as an object with an authentication
 type and the type appropriate information:
@@ -157,7 +180,7 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
 
 #### Example
 ```
-// HTTP - PUT von Mainzelliste an https://sel.mitro.dkfz.de:1234/initLocal
+// HTTP - PUT from Mainzelliste to https://sel.verbis.dkfz.de:1234/initLocal
 {
   "localId": "TUD",
   "localAuthentication": {
@@ -165,19 +188,19 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
     "sharedKey": "123abc"
   },
   "dataService": {
-    "url": "https://ml.mitro.dkfz.de:8080/rest/api/getAllRecords"
+    "url": "https://ml.verbis.dkfz.de:8080/rest/api/getAllRecords"
   },
   "algorithm": {
     "algoType": "epilink",
     "threshold_match": 0.9,
     "threshold_non_match": 0.7,
     "exchangeGroups": [[
-      "vorname",
-    "nachname",
-    "geburtsname"
+      "firstname",
+    "lastname",
+    "birthname"
     ]],
     "fields": [{
-      "name": "vorname",
+      "name": "firstname",
       "frequency": 0.000235,
       "errorRate": 0.01,
       "comparator": "dice",
@@ -185,14 +208,14 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
       "bitlength": 500
     },
     {
-      "name": "nachname","frequency": 0.0000271,
+      "name": "lastname","frequency": 0.0000271,
       "errorRate": 0.008,
       "comparator": "dice",
       "fieldType": "bitmask",
       "bitlength": 500
     },
     {
-      "name": "geburtsname",
+      "name": "birthname",
       "frequency": 0.0000271,
       "errorRate": 0.008,
       "comparator": "dice",
@@ -200,7 +223,7 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
       "bitlength": 500
     },
     {
-      "name": "geburtstag",
+      "name": "birthday",
       "frequency": 0.0333,
       "errorRate": 0.005,
       "comparator": "binary",
@@ -208,7 +231,7 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
       "bitlength": 5
     },
     {
-      "name": "geburtsmonat",
+      "name": "birthmonth",
       "frequency": 0.0833,
       "errorRate": 0.002,
       "comparator": "binary",
@@ -216,7 +239,7 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
       "bitlength": 4
     },
     {
-      "name": "geburtsjahr",
+      "name": "birthyear",
       "frequency": 0.0286,
       "errorRate": 0.004,
       "comparator": "binary",
@@ -224,7 +247,7 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
       "bitlength": 12
     },
     {
-      "name": "plz",
+      "name": "zipcode",
       "frequency": 0.01,
       "errorRate": 0.04,
       "comparator": "binary",
@@ -232,20 +255,12 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
       "bitlength": 17
     },
     {
-      "name": "ort",
+      "name": "city",
       "frequency": 0.01,
       "errorRate": 0.04,
       "comparator": "dice",
       "fieldType": "bitmask",
       "bitlength": 500
-    },
-    {
-      "name": "versichertennummer",
-      "frequency": 0.01,
-      "errorRate": 0.04,
-      "comparator": "binary",
-      "fieldType": "string",
-      "bitlength": 240
     }]
   }
 }
@@ -265,11 +280,11 @@ reserved for local initialization.
 The following data is transferred:
 
  1. connection profile
-    1. Remote URL
-    2. Remote authentication
+    1. remote URL
+    2. remote authentication
  2. linkage service information
     1. URL
-    2. Authentication information
+    2. authentication information
  3. `matchingAllowed` flag -- is the calculation of the set intersection
     cardinality allowed? Default: false
 
@@ -296,7 +311,7 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
 
 #### Example
 ```
-// HTTP - PUT von Mainzelliste an https://sel.mitro.dkfz.de:1234/initRemote/<remote-id>
+// HTTP - PUT from Mainzelliste to https://sel.verbis.dkfz.de:1234/initRemote/<remote-id>
 {
   "connectionProfile": {
     "url": "http://sel.mhh.de:1664",
@@ -306,7 +321,7 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
       }
   },
     "linkageService": {
-      "url": "https://ls.mitro.dkfz.de/",
+      "url": "https://ls.verbis.dkfz.de/",
       "authentication": {
         "authType": "apiKey",
         "sharedKey": "bcd234"
@@ -346,7 +361,7 @@ been successfully executed.
 
 #### Request
 To request SEL to perform a (single record) record linkage with "remote_id", the
-communicator of the main cell list sends a TLS authenticated and secured **HTTP
+communicator of the ML sends a TLS authenticated and secured **HTTP
 POST** to `https://{sel-host}:{sel-port}/linkRecord/{remote_id}`.
 
 This call is not idempotent, multiple identical calls generate multiple linkage
@@ -377,21 +392,20 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
 
 #### Example
 ```
-// HTTP POST von Mainzelliste an https://{sel-host}:{sel-port}:8081/linkRecord/dkfz
+// HTTP POST from Mainzelliste to https://{sel-host}:{sel-port}:8081/linkRecord/dkfz
 {
   "callback": {
-    "url": "https://mlc.mitro.dkfz.de/linkCallback?idType=link%3ATUD%3ADKFZ&idString=randomRef",
+    "url": "https://mlc.verbis.dkfz.de/linkCallback?idType=link%3ATUD%3ADKFZ&idString=randomRef",
   },
   "fields": {
-    "vorname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
-    "nachname": "5f3dPPzqJvw=...",
-    "geburtsname": null,
-    "geburtstag": 24,
-    "geburtsmonat": 12,
-    "geburtsjahr": 1864,
-    "plz": 65432,
-    "ort": "EFXma8cPVEA=...",
-    "versichertennummer": "A123456781-1"
+    "firstname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
+    "lastname": "5f3dPPzqJvw=...",
+    "birthname": null,
+    "birthday": 24,
+    "birthmonth": 12,
+    "birthyear": 1864,
+    "zipcode": 65432,
+    "city": "EFXma8cPVEA=..."
   }
 }
 // HTTP Reply 202 Accepted, Content-Location: /jobs/0012345823
@@ -401,7 +415,7 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
 
 #### Request
 To request SEL to perform a (multiple records) record linkage with "remote_id",
-the communicator of the main cell list sends a TLS authenticated and secured
+the communicator of the ML sends a TLS authenticated and secured
 **HTTP POST** to `https://{sel-host}:{sel-port}/linkRecords/{remote_id}`.
 
 This call is not idempotent, multiple identical calls generate multiple linkage
@@ -436,35 +450,33 @@ possible.
 
 #### Example
 ```
-// HTTP POST von Mainzelliste an https://{sel-host}:{sel-port}:8081/linkRecords/dkfz
+// HTTP POST from Mainzelliste to https://{sel-host}:{sel-port}:8081/linkRecords/dkfz
 {
   "callback": {
-    "url": "https://mlc.mitro.dkfz.de/linkCallback?idType=link%3ATUD%3ADKFZ&idString=randomRef",
+    "url": "https://mlc.verbis.dkfz.de/linkCallback?idType=link%3ATUD%3ADKFZ&idString=randomRef",
   },
     "total":1250,
     "toDate": 1232345512,
     "records": [{
       "fields": {
-        "vorname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
-        "nachname": "5f3dPPzqJvw=...",
-        "geburtsname": null,
-        "geburtstag": 24,
-        "geburtsmonat": 12,
-        "geburtsjahr": 1864,
-        "plz": 65432,
-        "ort": "EFXma8cPVEA=...",
-        "versichertennummer": "A123456781-1"
+        "firstname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
+        "lastname": "5f3dPPzqJvw=...",
+        "birthname": null,
+        "birthday": 24,
+        "birthmonth": 12,
+        "birthyear": 1864,
+        "zipcode": 65432,
+        "city": "EFXma8cPVEA=..."
       }},
     {"fields": {
-                 "vorname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
-                 "nachname": "5f3dPPzqJvw=...",
-                 "geburtsname": null,
-                 "geburtstag": 24,
-                 "geburtsmonat": 12,
-                 "geburtsjahr": 1864,
-                 "plz": 65432,
-                 "ort": "EFXma8cPVEA=...",
-                 "versichertennummer": "A123456781-1"
+                 "firstname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
+                 "lastname": "5f3dPPzqJvw=...",
+                 "birthname": null,
+                 "birthday": 24,
+                 "birthmonth": 12,
+                 "birthyear": 1864,
+                 "zipcode": 65432,
+                 "city": "EFXma8cPVEA=..."
                },
     ...
       ]
@@ -478,36 +490,202 @@ possible.
 #### Example
 
 ### Step L.6: linkCallback
+The local SEL forwards the record linkage result as a JSON object in a **HTTP POST**
+request. The JSON object adheres to the following form:
+```
+// HTTP POST to callback from linkRecord, e.g., "https://mlc.mitro.dkfz.de/linkCallback?idType=link%3ATUD%
+3ADKFZ&idString=randomRef"
+// Header: apiKey
+{
+  "result": {
+    "linkageId": "FooBar=" // base64 encoded linkage id, encrypted with key for local ML
+  },
+    "warning": "The following problem occurred during computation: ....",
+    "error": "Linkage server timeout" // Only if no result was generated
+}
+```
+The "warning" and "error" properties are optional. The "error" property may
+only be included if no result was computed.
 
-#### Request
-#### Response
-#### Example
+If multiple records were linked (cf. L.1b), the "result" property is an array of
+LID objects:
+```
+// HTTP POST to callback from linkRecords, e.g., "https://mlc.mitro.dkfz.de/linkCallback?idType=link%3ATUD%
+3ADKFZ&idString=randomRef"
+// Header: apiKey
+{
+  "result": [
+    {"linkageId": "FooBar="}, // base64 encoded linkage id, encrypted with key for local ML 
+    {"linkageId": "FooBar="}, // base64 encoded linkage id, encrypted with key for local ML 
+    ...
+    ],
+    "warning": "The following problem occurred during computation: ....",
+    "error": "Linkage server timeout" // Only if no result was generated
+}
+```
 
 ## Record "Matching", Patient Intersection Cardinality (M)
 
 ### Step M.1a: matchRecord
 
 #### Request
+To request SEL to perform a (single record) matching with "remote_id", the
+communicator of the ML sends a TLS authenticated and secured **HTTP
+POST** to `https://{sel-host}:{sel-port}/linkRecord/{remote_id}`.
+
+This call is not idempotent, multiple identical calls generate multiple matching
+requests.
+
+The following data is transferred:
+
+ 1. callback information
+    1. Callback URL
+ 2. data fields
+
+Empty fields are encoded as "null", e.g. for JSON as the null data type.
 #### Response
+If successful, SEL replies "202 Accepted". In the "Location" header field, the
+position of the status query of the matching job is transmitted (cf. [Status
+Monitoring](#Status-Monitoring-(S))).
+
+If the transmitted fields do not match the configuration initialized in process
+I, "401 Unauthorized" is transmitted.
+
+If the request is made before the initialization has been performed, "400 Bad
+Request" is replied.
+
+If SEL is in an error state, it will respond with "500 Internal Server Error" or
+"503 Service Unavailable". In the latter case a recovery time is sent with the
+"Retry-After" header if possible.
+
 #### Example
+```
+// HTTP POST from Mainzelliste to https://{sel-host}:{sel-port}:8081/matchRecord/dkfz
+{
+  "callback": {
+    "url": "https://mlc.verbis.dkfz.de/matchCallback?idType=link%3ATUD%3ADKFZ&idString=randomRef",
+  },
+  "fields": {
+    "firstname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
+    "lastname": "5f3dPPzqJvw=...",
+    "birthname": null,
+    "birthday": 24,
+    "birthmonth": 12,
+    "birthyear": 1864,
+    "zipcode": 65432,
+    "city": "EFXma8cPVEA=..."
+  }
+}
+// HTTP Reply 202 Accepted, Content-Location: /jobs/0012345823
+```
 
 ### Step M.1b: matchRecords
 
 #### Request
-#### Response
-#### Example
+To request SEL to perform a (multiple records) matching with "remote_id",
+the communicator of the ML sends a TLS authenticated and secured
+**HTTP POST** to `https://{sel-host}:{sel-port}/matchRecords/{remote_id}`.
 
+This call is not idempotent, multiple identical calls generate multiple matching
+requests.
+
+The following data is transferred:
+
+ 1. callback information
+    1. Callback URL
+ 2. records
+    1. data fields
+ 3. number of records
+
+Empty fields are encoded as "null", e.g. for JSON as the null data type.
+
+#### Response
+If successful, SEL replies "202 Accepted". In the "Location" header field, the
+position of the status query of the matching job is transmitted (cf. [Status
+Monitoring](#Status-Monitoring-(S))).
+
+If the
+transmitted fields do not match the configuration initialized in process I, "401
+Unauthorized" is transmitted.
+
+If the request is made before the initialization
+has been performed, "400 Bad Request" is replied.
+
+If SEL is in an error state,
+it will respond with "500 Internal Server Error" or "503 Service Unavailable".
+In the latter case a recovery time is sent with the "Retry-After" header if
+possible.
+
+#### Example
+```
+// HTTP POST from Mainzelliste to https://{sel-host}:{sel-port}:8081/matchRecords/dkfz
+{
+  "callback": {
+    "url": "https://mlc.verbis.dkfz.de/matchCallback?idType=link%3ATUD%3ADKFZ&idString=randomRef",
+  },
+    "total":1250,
+    "toDate": 1232345512,
+    "records": [{
+      "fields": {
+        "firstname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
+        "lastname": "5f3dPPzqJvw=...",
+        "birthname": null,
+        "birthday": 24,
+        "birthmonth": 12,
+        "birthyear": 1864,
+        "zipcode": 65432,
+        "city": "EFXma8cPVEA=..."
+      }},
+    {"fields": {
+                 "firstname": "I07A1YM4aKNXlQ...", // base64 encoded 500-bit bloom filter
+                 "lastname": "5f3dPPzqJvw=...",
+                 "birthname": null,
+                 "birthday": 24,
+                 "birthmonth": 12,
+                 "birthyear": 1864,
+                 "zipcode": 65432,
+                 "city": "EFXma8cPVEA=..."
+               },
+    ...
+      ]
+    }
+// HTTP Reply 202 Accepted, Content-Location: /jobs/0012345823
+```
 ### Step M.6a: matchCallback
-
-#### Request
-#### Response
-#### Example
+The local SEL transfers the matching result as a JSON object in a **HTTP POST**
+request. The JSON object adheres to the following form:
+```
+// HTTP POST to callback from matchRecord, e.g., "https://mlc.verbis.dkfz.de/matchCallback?id=<counter>"
+// Header: apiKey
+{
+  "result": {
+    "matches": 0,
+    "tentativeMatches": 1
+  },
+  "warning": "The following problem occurred during computation: ....",
+  "error": "Remote party unreachable." // Only if no result was computed
+}
+```
+The "warning" and "error" properties are optional. The "error" property may
+only be included if no result was computed.
 
 ### Step M.6b: matchsCallback
-
-#### Request
-#### Response
-#### Example
+The local SEL transfers the matching result as a JSON object in a **HTTP POST**
+request. The JSON object adheres to the following form:
+```
+// HTTP POST to callback from matchRecords, e.g., "https://mlc.verbis.dkfz.de/matchCallback?id=<counter>"
+// Header: apiKey
+{
+  "result": {
+    "matches": 7,
+    "tentativeMatches": 10
+  },
+  "warning": "The following problem occurred during computation: ....",
+  "error": "Remote party unreachable." // Only if no result was computed
+}
+```
+The "warning" and "error" properties are optional. The "error" property may
+only be included if no result was computed.
 
 ## Computation (C)
 ### Step C.1: initMPC
@@ -524,10 +702,11 @@ possible.
 This process can run in parallel to processes L and M and enables the current
 processing status of one or all matching/linkage requests to be queried.
 
-|     | Name       | Description                                                              | Caller    | Callee | API Endpoint at Callee |
-|-----|------------|--------------------------------------------------------------------------|-----------|--------|------------------------|
-| S.1 | jobStatus  | ML or user sends the job ID to SEL and receives a processing status back | ML / User | SEL    | /jobs/<job_id>         |
-| S.2 | statusList | ML or user receives the status of all jobs                               | ML / User | SEL    | /jobs/list             |
+|     | Name           | Description                                                              | Caller    | Callee | API Endpoint at Callee                   |
+|-----|----------------|--------------------------------------------------------------------------|-----------|--------|------------------------------------------|
+| S.1 | jobStatus      | ML or user sends the job ID to SEL and receives a processing status back | ML / User | SEL    | /jobs/<job_id>                           |
+| S.2 | statusList     | ML or user receives the status of all jobs                               | ML / User | SEL    | /jobs/list                               |
+| S.3 | getMatchStatus | The user queries the ML for the final matching result                    | User      | ML     | /Communicator/matchMN/status/<remote_id> |
 
 ### Step S.1: jobStatus
 
@@ -572,3 +751,10 @@ Possible states are:
  * DONE
 
 If no job  exists, the JSON is empty.
+
+### Step S.3: getMatchStatus
+
+#### Request
+
+#### Response
+
