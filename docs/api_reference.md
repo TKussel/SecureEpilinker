@@ -696,7 +696,7 @@ Empty fields are encoded as "null", e.g. for JSON as the null data type.
 #### Response
 If successful, SEL replies "202 Accepted". In the "Location" header field, the
 position of the status query of the matching job is transmitted (cf. [Status
-Monitoring](#Status-Monitoring-(S))).
+Monitoring](#status-monitoring-s)).
 
 If the
 transmitted fields do not match the configuration initialized in process I, "401
