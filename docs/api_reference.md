@@ -24,7 +24,7 @@ Steps 2. and 3. are interleaved.
 
 ### Global SEL Identifier
 Each ML has a global ID, which consists of the character set `[a-zA-Z0-9_]`
-(i.e. alphanumeric plus '_',). This global ID is also registered at the
+(i.e. alphanumeric plus '_'). This global ID is also registered at the
 LS for LID management. Under this ID the LS stores the
 Identifier Encryption Keys and each global ID is assigned to an API key.
 
@@ -39,8 +39,12 @@ Thus the specification follows [rfc2617](http://www.ietf.org/rfc/rfc2617.txt).
 
 ### Modes of operation
 
-TODO Link
-TODO Match
+MainSEL can operate in two modes:
+
+ 1. Record Linkage with LID generation/management. Sometimes just
+    called "linkage". Requires a LS.
+ 2. Calculation of set intersection cardinality, i.e., sum of match bits.
+    Sometimes called "matching". Does not require a LS.
 
 ## TL;DR: User-Facing API Endpoints
 
@@ -483,11 +487,54 @@ possible.
     }
 // HTTP Reply 202 Accepted, Content-Location: /jobs/0012345823
 ```
+
 ### Step L.5: sendLinkageResult
 
 #### Request
+Both SELs send a **HTTP POST** request to the configured LS address. The
+reference implementation uses the address
+`https://{LS-host}:{LS-port}/linkageResult/<local_id>/<remote_id>`.
+The Request contains a JSON object with the following properties:
+
+ 1. role
+    * server
+    * client
+ 2. result
+    1. match bit share
+    2. tentative match bit share
+    3. bestIndex share
+ 3. encrypted LIDs, if role == server
+
 #### Response
+The LS responds to the client with a JSON object containing one or more linkage
+IDs results. Optionally, the LS may include a warning field or, in case of a
+failed calculation, an error description.
+
 #### Example
+```
+// HTTP POST of both SEL to LS https://ls.mitro.dkfz.de/linkageResult/<local-id>/<remote-id>
+{
+  "role": "server" // or "client"
+    "result": {
+      "match": 0, // XOR share of match bit
+        "tentativeMatch": 1, // XOR share of tentative match bit
+        "bestIndex" : 4 // XOR share of best match index
+    },
+    "ids": ["FooBar=", ...] // only if role == server
+}
+```
+LS reply to client:
+```
+{
+  "result": [
+  {"linkageId": "FooBar=" // base64 encoded linkage id, encrypted with key for local ML},
+  {"linkageId": "FooBar=" // base64 encoded linkage id, encrypted with key for local ML},
+  ...
+  ],
+  "warning": "The following problem occurred during computation: ....",
+  "error": "Linkage server timeout" // Only if no result was generated
+}
+```
 
 ### Step L.6: linkCallback
 The local SEL forwards the record linkage result as a JSON object in a **HTTP POST**
@@ -525,6 +572,16 @@ LID objects:
 ```
 
 ## Record "Matching", Patient Intersection Cardinality (M)
+
+This process calculates the set intersection cardinality of one (set of) records
+and the remote database. This process can occur any number of times in
+succession once process I (initialization) has been successfully executed.
+
+|      | Name          | Description                                                                                 | Caller | Callee | API Endpoint at Callee    |
+|------|---------------|---------------------------------------------------------------------------------------------|--------|--------|---------------------------|
+| M.1a | matchRecord   | The ML creates a matching job by providing a single record and the result callback address  | ML     | SEL    | /matchRecord/<remote_id>  |
+| M.1b | matchRecords  | The ML creates a matching job by providing multiple records and the result callback address | ML     | SEL    | /matchRecords/<remote_id> |
+| M.7  | matchCallback | SEL sends the set intersection cardinality calculated before to the given callback address  | SEL    | ML     | <callback_url>            |
 
 ### Step M.1a: matchRecord
 
@@ -688,15 +745,71 @@ The "warning" and "error" properties are optional. The "error" property may
 only be included if no result was computed.
 
 ## Computation (C)
+Some signaling is necessary to perform the chosen computation. These calls are
+interleaved with the L or M process calls.
+
 ### Step C.1: initMPC
+The local SEL signals the remote SEL that it wants to perform a record linkage/matching.
+Subsequently, the remote SEL retrieves the database of its ML.
 
 ### Step C.2: getAllRecords
-
+The remote SEL requires the entire set of records. For that, it requests those
+data form the remote ML. Note, that at the moment no caching is implemented.
 #### Request
+Since we want to preserve the navigability, all data except the ApiKey is passed along via the URL.
+The remote SEL performs a **HTTP GET** request to `https://{ML-host}:{ML-port}/getAllRecords/<requester-id>`.
 #### Response
+In case of failed authentication "401 Unauthorized" is replied.
+
+In case of a malformed request "400 Bad Request" is replied.
+
+A successful reply transmits a JSON object containing the records, according to
+the following example.
+Empty fields are encoded as "null", e.g. for JSON as the null data type.
+Note, for matching mode no ID field is required in the records array.
+
 #### Example
+```
+// HTTP Get from remote SEL to https://ml.verbis.dkfz.de:8080/rest/api/getAllRecords/TUD
+{
+  "total":1250,
+    "toDate":1524096000,
+    "localId": "DKFZ",
+    "remoteId": "TUD",
+    "records":[
+    {
+      "fields":{
+        "firstname":"I07A1YM4aKNXlQ...",
+        "lastname":"5f3dPPzqJvw=...",
+        "birthname":"kj8ictbYoOM=...",
+        "birthday":24,
+        "birthmonth":12,
+        "birthyear":1864,
+        "zipcode":"65432",
+        "city":"EFXma8cPVEA=..."
+      },
+      "id": "12345",
+    },
+    {
+      "fields":{
+        "firstname":"I07A1YM4aKNXlQ...",
+        "lastname":"5f3dPPzqJvw=...",
+        "birthname":"kj8ictbYoOM=...",
+        "birthday":24,
+        "birthmonth":1,
+        "birthyear":1964,
+        "zipcode":"65432",
+        "city":"EFXma8cPVEA=..."
+      },
+      "id": "23231",
+    },
+    ...
+  ]
+}
+```
 
 ### Step C.3: secureEpiLink
+Both SELs perform the secure Two-Party computation via raw TCP socket.
 
 ## Status Monitoring (S)
 This process can run in parallel to processes L and M and enables the current
