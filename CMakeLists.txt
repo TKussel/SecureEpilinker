@@ -22,7 +22,7 @@ set(${P}_EXTRA_WARNING_FLAGS
 
 # Custom compiler and linker flags
 add_compile_options("-pipe"
-  "$<$<CONFIG:RELEASE>:-O2>"
+  "$<$<CONFIG:RELEASE>:-O2;-march=x86-64;-mmmx;-msse;-msse2;-mssse3;-msse4_1;-msse4_2;-mpopcnt;-maes;-mno-avx;-mno-avx2>"
   "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>"
   ${CMAKE_FLAGS_EXTRA})
 list(APPEND CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS_EXTRA})
