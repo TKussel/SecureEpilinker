@@ -7,15 +7,15 @@ Last update: 31.03.2022
 
 ## TOC
 
- * [Process Overview](#Process-Overview)
- * [Preliminaries](#Preliminaries)
- * [User-Facing API Endpoints](#User-Facing-API-Endpoints)
- * [Setup for Linkage ID Generation](#Setup-for-Linkage-ID-Generation)
- * [SEL Initialization (I)](#SEL-Initialization-\(I\))
- * [Record Linkage (L)](#Record-Linkage-\(L\))
- * [Record "Matching", Patient Intersection Cardinality (M)](#Record-\"Matching\"\,-Patient-Intersection-Cardinality-\(M\))
- * [Computation (C)](#Computation-\(C\))
- * [Status Monitoring (S)](#Status-Monitoring-\(S\))
+ * [Process Overview](#process-overview)
+ * [Preliminaries](#preliminaries)
+ * [User-Facing API Endpoints](#user-facing-api-endpoints)
+ * [Setup for Linkage ID Generation](#setup-for-linkage-id-generation)
+ * [SEL Initialization (I)](#sel-initialization-i)
+ * [Record Linkage (L)](#record-linkage-l)
+ * [Record "Matching", Patient Intersection Cardinality (M)](#record-matching-patient-intersection-cardinality-m)
+ * [Computation (C)](#computation-c)
+ * [Status Monitoring (S)](#status-monitoring-s)
 
 ## Process Overview
 
