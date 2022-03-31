@@ -1,11 +1,25 @@
 # MainSEL API Reference
-TODO Include Mainzelliste endpoints
+
+![API Overview](mainsel_api_overview.svg)
+
+This Document shows the main (external) API endpoints of MainSEL.
+Last update: 31.03.2022
 
 ## TOC
 
+ * [Process Overview](#Process-Overview)
+ * [Preliminaries](#Preliminaries)
+ * [User-Facing API Endpoints](#User-Facing-API-Endpoints)
+ * [Setup for Linkage ID Generation](#Setup-for-Linkage-ID-Generation)
+ * [SEL Initialization (I)](#SEL-Initialization-\(I\))
+ * [Record Linkage (L)](#Record-Linkage-\(L\))
+ * [Record "Matching", Patient Intersection Cardinality (M)](#Record-\"Matching\"\,-Patient-Intersection-Cardinality-\(M\))
+ * [Computation (C)](#Computation-\(C\))
+ * [Status Monitoring (S)](#Status-Monitoring-\(S\))
+
 ## Process Overview
 
- 0. Setup for linkage 
+ 0. Setup for linkage
  1. Initialization (I)
  2. Linkage / Matching (L/M)
  3. Computation (C)
@@ -31,7 +45,7 @@ Identifier Encryption Keys and each global ID is assigned to an API key.
 ### Authorization
 The reference implementation uses a protocol based on HTTP BASIC authentication.
 The APIKey passed in the initialization phase is transmitted as an HTTP header
-in the following way: 
+in the following way:
 ```
 Authorization: apiKey apiKey="<APIKey>"
 ```
@@ -46,11 +60,17 @@ MainSEL can operate in two modes:
  2. Calculation of set intersection cardinality, i.e., sum of match bits.
     Sometimes called "matching". Does not require a LS.
 
-## TL;DR: User-Facing API Endpoints
+## User-Facing API Endpoints
 
- * TODO InitTest
- * TODO InitMatch
- * TODO InitLink
+
+|     | Name               | Description                                                                                    | Caller    | Callee | API Endpoint at Callee                    |
+|-----|--------------------|------------------------------------------------------------------------------------------------|-----------|--------|-------------------------------------------|
+| I.3 | testRemote         | The connection to and configuration of a remote party is tested and the connection established | ML / User | SEL    | /test/<remote_id>                         |
+| I.4 | testLinkageService | The connection to a LE is tested and established                                               | ML / User | SEL    | /testLS/<remote_id>                       |
+| -   | triggerLinkMN      | Initiate the record linkage between local ML and remote ML                                     | User      | ML     | /Communicator/linkMN/trigger/<remote_id>  |
+| -   | triggerMatchMN     | Initiate the matching of the local ML against the remote ML                                    | User      | ML     | /Communicator/matchMN/trigger/<remote_id> |
+| -   | getMatchStatus     | The user queries the ML for the final matching result                                          | User      | ML     | /Communicator/matchMN/status/<remote_id>  |
+
 
 ## Setup for Linkage ID Generation
 
@@ -335,17 +355,34 @@ If SEL is in an error state, it will respond with "500 Internal Server Error" or
 }
 // HTTP Reply 204 No Content
 ```
-### Step I.3a: testRemote
+### Step I.3: testRemote
 
 #### Request
+The user sends a **HTTP GET** to `https://{sel-host}:{sel-port}/test/<remote_id>`.
+
 #### Response
-#### Example
+If a connection is successfully tested and established, "200 OK" is
+sent with the body "Remotes Connected".
 
-### Step I.3b: testLinkageService
+In case of an invalid request syntax "400 Bad Request" is sent.
 
+If SEL is in an error state, it will respond with "500 Internal Server Error" or
+"503 Service Unavailable". In the latter case a recovery time is sent with the
+"Retry-After" header if possible.
+
+### Step I.4: testLinkageService
 #### Request
+The user sends a **HTTP GET** to `https://{sel-host}:{sel-port}/test/<remote_id>`.
+
 #### Response
-#### Example
+If a connection is successfully tested and established, "200 OK" is
+sent with the body "Linkage Service connected".
+
+In case of an invalid request syntax "400 Bad Request" is sent.
+
+If SEL is in an error state, it will respond with "500 Internal Server Error" or
+"503 Service Unavailable". In the latter case a recovery time is sent with the
+"Retry-After" header if possible.
 
 ## Record Linkage (L)
 This process links (a) local record(s) against the remote database. This process
@@ -357,8 +394,8 @@ been successfully executed.
 |------|-------------------|---------------------------------------------------------------------------------------------------|------------------|--------|--------------------------|
 | L.1a | linkRecord        | The ML creates a record linkage job by providing a single record and the result callback address  | ML               | SEL    | /linkRecord/<remote_id>  |
 | L.1b | linkRecords       | The ML creates a record linkage job by providing multiple records and the result callback address | ML               | SEL    | /linkRecords/<remote_id> |
-| L.6  | sendLinkageResult | Both SELs send their XOR shares to the linkage service. The resulting LID(s) are in the response  | local+remote SEL | LS     | /linkageResult           |
-| L.7  | linkCallback      | SEL sends the LID received in L.6 to the given callback address                                   | SEL              | ML     | <callback_url>           |
+| L.2  | sendLinkageResult | Both SELs send their XOR shares to the linkage service. The resulting LID(s) are in the response  | local+remote SEL | LS     | /linkageResult           |
+| L.3  | linkCallback      | SEL sends the LID received in L.6 to the given callback address                                   | SEL              | ML     | <callback_url>           |
 
 
 ### Step L.1a: linkRecord
@@ -488,7 +525,7 @@ possible.
 // HTTP Reply 202 Accepted, Content-Location: /jobs/0012345823
 ```
 
-### Step L.5: sendLinkageResult
+### Step L.2: sendLinkageResult
 
 #### Request
 Both SELs send a **HTTP POST** request to the configured LS address. The
@@ -536,7 +573,7 @@ LS reply to client:
 }
 ```
 
-### Step L.6: linkCallback
+### Step L.3: linkCallback
 The local SEL forwards the record linkage result as a JSON object in a **HTTP POST**
 request. The JSON object adheres to the following form:
 ```
@@ -562,8 +599,8 @@ LID objects:
 // Header: apiKey
 {
   "result": [
-    {"linkageId": "FooBar="}, // base64 encoded linkage id, encrypted with key for local ML 
-    {"linkageId": "FooBar="}, // base64 encoded linkage id, encrypted with key for local ML 
+    {"linkageId": "FooBar="}, // base64 encoded linkage id, encrypted with key for local ML
+    {"linkageId": "FooBar="}, // base64 encoded linkage id, encrypted with key for local ML
     ...
     ],
     "warning": "The following problem occurred during computation: ....",
@@ -581,7 +618,7 @@ succession once process I (initialization) has been successfully executed.
 |------|---------------|---------------------------------------------------------------------------------------------|--------|--------|---------------------------|
 | M.1a | matchRecord   | The ML creates a matching job by providing a single record and the result callback address  | ML     | SEL    | /matchRecord/<remote_id>  |
 | M.1b | matchRecords  | The ML creates a matching job by providing multiple records and the result callback address | ML     | SEL    | /matchRecords/<remote_id> |
-| M.7  | matchCallback | SEL sends the set intersection cardinality calculated before to the given callback address  | SEL    | ML     | <callback_url>            |
+| M.2  | matchCallback | SEL sends the set intersection cardinality calculated before to the given callback address  | SEL    | ML     | <callback_url>            |
 
 ### Step M.1a: matchRecord
 
@@ -708,29 +745,11 @@ possible.
     }
 // HTTP Reply 202 Accepted, Content-Location: /jobs/0012345823
 ```
-### Step M.6a: matchCallback
+### Step M.2: matchCallback
 The local SEL transfers the matching result as a JSON object in a **HTTP POST**
 request. The JSON object adheres to the following form:
 ```
 // HTTP POST to callback from matchRecord, e.g., "https://mlc.verbis.dkfz.de/matchCallback?id=<counter>"
-// Header: apiKey
-{
-  "result": {
-    "matches": 0,
-    "tentativeMatches": 1
-  },
-  "warning": "The following problem occurred during computation: ....",
-  "error": "Remote party unreachable." // Only if no result was computed
-}
-```
-The "warning" and "error" properties are optional. The "error" property may
-only be included if no result was computed.
-
-### Step M.6b: matchsCallback
-The local SEL transfers the matching result as a JSON object in a **HTTP POST**
-request. The JSON object adheres to the following form:
-```
-// HTTP POST to callback from matchRecords, e.g., "https://mlc.verbis.dkfz.de/matchCallback?id=<counter>"
 // Header: apiKey
 {
   "result": {
@@ -744,9 +763,14 @@ request. The JSON object adheres to the following form:
 The "warning" and "error" properties are optional. The "error" property may
 only be included if no result was computed.
 
+
 ## Computation (C)
 Some signaling is necessary to perform the chosen computation. These calls are
 interleaved with the L or M process calls.
+|     | Name          | Description                              | Caller    | Callee     | API Endpoint at Callee    |
+|-----|---------------|------------------------------------------|-----------|------------|---------------------------|
+| C.1 | initMPC       | Signal remote SEL to prepare calculation | local SEL | remote SEL | /initMPC                  |
+| C.2 | getAllRecords | Request all records from remote ML       | remoteSEL | remote ML  | /getAllRecords/<local_id> |
 
 ### Step C.1: initMPC
 The local SEL signals the remote SEL that it wants to perform a record linkage/matching.
@@ -808,9 +832,6 @@ Note, for matching mode no ID field is required in the records array.
 }
 ```
 
-### Step C.3: secureEpiLink
-Both SELs perform the secure Two-Party computation via raw TCP socket.
-
 ## Status Monitoring (S)
 This process can run in parallel to processes L and M and enables the current
 processing status of one or all matching/linkage requests to be queried.
@@ -819,7 +840,6 @@ processing status of one or all matching/linkage requests to be queried.
 |-----|----------------|--------------------------------------------------------------------------|-----------|--------|------------------------------------------|
 | S.1 | jobStatus      | ML or user sends the job ID to SEL and receives a processing status back | ML / User | SEL    | /jobs/<job_id>                           |
 | S.2 | statusList     | ML or user receives the status of all jobs                               | ML / User | SEL    | /jobs/list                               |
-| S.3 | getMatchStatus | The user queries the ML for the final matching result                    | User      | ML     | /Communicator/matchMN/status/<remote_id> |
 
 ### Step S.1: jobStatus
 
@@ -864,10 +884,3 @@ Possible states are:
  * DONE
 
 If no job  exists, the JSON is empty.
-
-### Step S.3: getMatchStatus
-
-#### Request
-
-#### Response
-
